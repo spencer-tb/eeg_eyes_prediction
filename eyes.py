@@ -33,11 +33,14 @@ for i in range(len(eeg_eyes)):
     # convert list from dtype to float
     eeg_eyes.append(line.strip().split(','))
 
-    x.append(np.array(eeg_eyes[i][0:-1]))
+    # delete dc offset 4100uV from sensors
+    x.append(np.array(eeg_eyes[i][0:-1]) - 4100)
     y.append(np.array(eeg_eyes[i][-1]))
 
 # split data into test/train
-x_train, x_test, y_train, y_test = train_test_split(x, y)
+x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8,
+                                                    test_size=0.2)
+# convert to np arrays
 y_train = np.array(y_train)
 y_test  = np.array(y_test)
 
@@ -48,8 +51,9 @@ x_test  = tf.keras.utils.normalize(x_test,  axis=1)
 ## Create & Fit Model
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Flatten(input_shape = x_train[0].shape))
-model.add(tf.keras.layers.Dense(12, activation=tf.nn.relu))
-model.add(tf.keras.layers.Dense(6, activation=tf.nn.relu))
+model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
+model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
+model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax))
 
 STEPS_PER_EPOCH=100
@@ -60,14 +64,22 @@ lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
       staircase=False
 )
 
-model.compile(optimizer=tf.keras.optimizers.Adam(lr_schedule),
+model.compile(optimizer='adam',
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
-model.fit(x_train,y_train, epochs=3, steps_per_epoch=STEPS_PER_EPOCH,
+model.fit(x_train,y_train, epochs=40, steps_per_epoch=STEPS_PER_EPOCH,
           validation_data=(x_test, y_test))
 
 ## Test Model data
 model.save('eeg.model')
 new_model = tf.keras.models.load_model('eeg.model')
+##
 predictions = new_model.predict(x_test)
+count = 0
+for i in range(len(predictions)):
+    print(np.argmax(predictions[i]))
+    if (np.argmax(predictions[i]) == 0):
+        count = count + 1
+
+print(count*100/len(predictions))
