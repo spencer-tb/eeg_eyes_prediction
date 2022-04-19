@@ -24,29 +24,35 @@ for i in range(len(data_eeg_eyes)):
     for j in range(len(data_eeg_eyes[i])):
         tmp.append(float(data_eeg_eyes[i][j]))
         eeg_eyes.append(tmp)
+# tensor format
+eeg_eyes = np.array(eeg_eyes).astype(np.float32)
 
-## Preprocess into x/y test/train
-# get NN inputs and outputs
-x, y = [], []
-for i in range(len(eeg_eyes)):
+## Preprocess into x/y - test/train
+# split data into test/train/validation
+train_size = int(0.8 * len(eeg_eyes))
+test_size  = int(0.1 * len(eeg_eyes))
+val_size   = int(0.1 * len(eeg_eyes))
+train_ds = eeg_eyes[0:train_size]
+test_ds  = eeg_eyes[train_size:test_size+train_size]
+val_ds   = eeg_eyes[train_size+test_size:val_size+test_size+train_size]
 
-    # convert list from dtype to float
-    eeg_eyes.append(line.strip().split(','))
+# split into x/y
+def split_xy(ds, ds_size):
+    x, y = [], []
+    for i in range(ds_size):
+        # delete dc offset 4100uV from sensors
+        x.append(ds[i][0:-1] - 4100)
+        y.append(ds[i][-1])
+    return x, y
 
-    # delete dc offset 4100uV from sensors
-    x.append(np.array(eeg_eyes[i][0:-1]) - 4100)
-    y.append(np.array(eeg_eyes[i][-1]))
+x_train, y_train = split_xy(train_ds, len(train_ds))
+x_test, y_test = split_xy(test_ds, len(test_ds))
+x_val, y_val = split_xy(val_ds, len(val_ds))
 
-# split data into test/train
-x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8,
-                                                    test_size=0.2)
-# convert to np arrays
-y_train = np.array(y_train)
-y_test  = np.array(y_test)
-
-# normalise test/train
+# normalise x_test/train/val
 x_train = tf.keras.utils.normalize(x_train, axis=1)
-x_test  = tf.keras.utils.normalize(x_test,  axis=1)
+x_test  = tf.keras.utils.normalize(x_test , axis=1)
+x_val   = tf.keras.utils.normalize(x_val  , axis=1)
 
 ## Create & Fit Model
 model = tf.keras.models.Sequential()
@@ -56,30 +62,14 @@ model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax))
 
-STEPS_PER_EPOCH=100
-lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
-      0.001,
-      decay_steps=STEPS_PER_EPOCH*1000,
-      decay_rate=1,
-      staircase=False
-)
-
 model.compile(optimizer='adam',
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
-model.fit(x_train,y_train, epochs=40, steps_per_epoch=STEPS_PER_EPOCH,
-          validation_data=(x_test, y_test))
+model.fit(x_train, np.array(y_train), epochs=40, steps_per_epoch=100,
+          validation_data=(x_val, np.array(y_val)))
 
-## Test Model data
-model.save('eeg.model')
-new_model = tf.keras.models.load_model('eeg.model')
-##
-predictions = new_model.predict(x_test)
-count = 0
-for i in range(len(predictions)):
-    print(np.argmax(predictions[i]))
-    if (np.argmax(predictions[i]) == 0):
-        count = count + 1
-
-print(count*100/len(predictions))
+## Test Model
+print("Evaluate on test data")
+results = model.evaluate(x_test, np.array(y_test), batch_size=128)
+print("test loss, test acc:", results)
