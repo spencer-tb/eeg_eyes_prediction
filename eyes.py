@@ -6,6 +6,10 @@ import seaborn as sns
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
+# Set tensorflow compiler flag
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 ## Load in EEG data
 data_path = '/home/spencer-tb/Documents/eeg/1_eyes/EEG_Eyes.txt'
 data_eeg_eyes = []
@@ -33,15 +37,37 @@ for i in range(len(eeg_eyes)):
     y.append(np.array(eeg_eyes[i][-1]))
 
 # split data into test/train
-x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.7)
+x_train, x_test, y_train, y_test = train_test_split(x, y)
+y_train = np.array(y_train)
+y_test  = np.array(y_test)
 
 # normalise test/train
 x_train = tf.keras.utils.normalize(x_train, axis=1)
 x_test  = tf.keras.utils.normalize(x_test,  axis=1)
 
-## Create NN-Model
+## Create & Fit Model
 model = tf.keras.models.Sequential()
-model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
-model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
+model.add(tf.keras.layers.Flatten(input_shape = x_train[0].shape))
+model.add(tf.keras.layers.Dense(12, activation=tf.nn.relu))
+model.add(tf.keras.layers.Dense(6, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax))
 
+STEPS_PER_EPOCH=100
+lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
+      0.001,
+      decay_steps=STEPS_PER_EPOCH*1000,
+      decay_rate=1,
+      staircase=False
+)
+
+model.compile(optimizer=tf.keras.optimizers.Adam(lr_schedule),
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+
+model.fit(x_train,y_train, epochs=3, steps_per_epoch=STEPS_PER_EPOCH,
+          validation_data=(x_test, y_test))
+
+## Test Model data
+model.save('eeg.model')
+new_model = tf.keras.models.load_model('eeg.model')
+predictions = new_model.predict(x_test)
