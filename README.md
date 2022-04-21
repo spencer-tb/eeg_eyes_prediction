@@ -1,5 +1,5 @@
-#EEG Eye Prediction
-Predict whether a subjects are open or closed using a RNN across EEG data.
+##EEG Eye Prediction
+Predict whether a subjects are open or closed using a CNN across EEG data.
 
 Eye State Prediction: 117 seconds recording of a single subject with labeled eye state data (open and closed) recorded using EPOC headset (14 electrodes).
 
